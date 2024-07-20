@@ -12,6 +12,20 @@ const CELL_HEIGHT = GAME_HEIGHT / GRID_ROWS;
 
 const EPS = 1e-6;
 
+const SCENE = [
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "green", null, null, null, null, null, null, null, null, null],
+]
+
 GAME.width = GAME_WIDTH;
 GAME.height = GAME_HEIGHT;
 
@@ -88,6 +102,16 @@ function drawGrid() {
       new Vec2(0, y)
     );
   }
+
+  for (let x = 0; x <= GRID_COLS; ++x) {
+    for (let y = 0; y <= GRID_ROWS; ++y) {
+      if (SCENE[y][x] != null) {
+        CTX_2D.fillStyle = SCENE[y][x];
+        CTX_2D.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+
 }
 
 function closestOneDimensionGridBoundary(x1, dx) {
@@ -100,14 +124,24 @@ function closestOneDimensionGridBoundary(x1, dx) {
   }
 }
 
+function pointCell(point) {
+  return new Vec2(
+    Math.floor(point.x),
+    Math.floor(point.y),
+  );
+}
+
 function castRay(from, to) {
     const result = rayStep(from, to);
     CTX_2D.strokeStyle = 'blue';
     drawCircle(result, 0.15, 'blue');
 
+    const resultCell = pointCell(result);
+
     if (
-      result.x < GRID_COLS && result.x > 0 &&
-      result.y < GRID_ROWS && result.y > 0
+      resultCell.x < GRID_COLS && resultCell.x >= 0 &&
+      resultCell.y < GRID_ROWS && resultCell.y >= 0 &&
+      SCENE[resultCell.y][resultCell.x] == null
     ) {
       castRay(to, result)
     }
