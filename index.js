@@ -1,18 +1,15 @@
 const GAME = document.getElementById('game');
 const CTX_2D = GAME.getContext('2d');
 
-const GAME_WIDTH = 1000;
-const GAME_HEIGHT = 1000;
-
-const GRID_COLS = 10;
-const GRID_ROWS = 10;
-
-const CELL_WIDTH = GAME_WIDTH / GRID_COLS;
-const CELL_HEIGHT = GAME_HEIGHT / GRID_ROWS;
+const GAME_WIDTH = 2000;
+const GAME_HEIGHT = 2000;
 
 const EPS = 1e-6;
 
+const PLAYER_STEP_LEN = 0.5;
+
 const SCENE = [
+  [null, "red", null, null, null, null, null, null, null, null, null],
   [null, "green", null, null, null, null, null, null, null, null, null],
   [null, "green", null, null, null, null, null, null, null, null, null],
   [null, "green", null, null, null, null, null, null, null, null, null],
@@ -21,21 +18,26 @@ const SCENE = [
   [null, "green", null, null, null, null, null, null, null, null, null],
   [null, "green", null, null, null, null, null, null, null, null, null],
   [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
+  [null, "red", null, null, null, null, null, null, null, null, null],
+  [null, "red", null, null, null, null, null, null, null, null, "purple"],
 ]
 
-GAME.width = GAME_WIDTH;
-GAME.height = GAME_HEIGHT;
+const STRIP_WIDTH = 0.1;
 
-CTX_2D.scale(CELL_WIDTH, CELL_HEIGHT)
+const GRID_COLS = SCENE[0].length ;
+const GRID_ROWS = SCENE.length;
+
+const CELL_WIDTH = GAME_WIDTH / GRID_COLS;
+const CELL_HEIGHT = GAME_HEIGHT / GRID_ROWS;
 
 class Vec2 {
   constructor(x, y) {
     this.x = x;
     this.y = y;
   };
+  static fromAngle(angle) {
+    return new Vec2(Math.cos(angle), Math.sin(angle));
+  }
   div(that) {
     return new Vec2(this.x / that.x, this.y / that.y);
   }
@@ -61,7 +63,44 @@ class Vec2 {
   distanceTo(that) {
     return that.sub(this).length();
   }
+  array() {
+    return [this.x, this.y];
+  }
+  dot(that) {
+    return this.x * that.x + this.y * that.y;
+  }
+  lerp(that, t) {
+    return that.sub(this).scale(t).add(this);
+  }
 }
+
+const FOV = Math.PI * 0.5;
+const NEAR_CLIPPING_PLANE = 1.0;
+
+class Player {
+  constructor(position, direction) {
+    this.position = position;
+    this.direction = direction;
+  };
+  lineOfSight() {
+    return this.position.add(Vec2.fromAngle(this.direction).scale(EPS));
+  }
+  fov(length) {
+    const left = this.position.add(
+      Vec2.fromAngle(this.direction - Math.PI / 4).norm().scale(length)
+    );
+    const right = this.position.add(
+      Vec2.fromAngle(this.direction + Math.PI / 4).norm().scale(length)
+    );
+
+    return [left, right];
+  }
+}
+
+const MINIMAP_SIZE = new Vec2(3, 3);
+const MINIMAP_POSITION = new Vec2(0.1, 0.1);
+
+const GRID_SIZE = new Vec2(GRID_COLS, GRID_ROWS);
 
 function drawLine(from, to) {
   CTX_2D.beginPath();
@@ -85,33 +124,32 @@ function drawCircle(position, radius, fillStyle = null) {
 
 function drawGrid() {
   CTX_2D.fillStyle = '#181818';
-  CTX_2D.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  CTX_2D.fillRect(0, 0, GRID_SIZE.x, GRID_SIZE.y);
 
   CTX_2D.lineWidth = 0.04;
 
   CTX_2D.strokeStyle = "#303030";
   for (let x = 0; x <= GRID_COLS; ++x) {
     drawLine(
-      new Vec2(x, GAME_HEIGHT),
+      new Vec2(x, GRID_SIZE.y),
       new Vec2(x, 0)
     );
   }
   for (let y = 0; y <= GRID_ROWS; ++y) {
     drawLine(
-      new Vec2(GAME_WIDTH, y),
+      new Vec2(GRID_SIZE.x, y),
       new Vec2(0, y)
     );
   }
 
-  for (let x = 0; x <= GRID_COLS; ++x) {
-    for (let y = 0; y <= GRID_ROWS; ++y) {
+  for (let x = 0; x < GRID_COLS; ++x) {
+    for (let y = 0; y < GRID_ROWS; ++y) {
       if (SCENE[y][x] != null) {
         CTX_2D.fillStyle = SCENE[y][x];
         CTX_2D.fillRect(x, y, 1, 1);
       }
     }
   }
-
 }
 
 function closestOneDimensionGridBoundary(x1, dx) {
@@ -131,20 +169,71 @@ function pointCell(point) {
   );
 }
 
+function renderMinimap(player) {
+  CTX_2D.save();
+
+  CTX_2D.translate(...MINIMAP_POSITION.array());
+  CTX_2D.scale(...MINIMAP_SIZE.div(GRID_SIZE).array());
+
+  drawGrid();
+  CTX_2D.strokeStyle = 'magenta';
+  drawCircle(player.position, 0.15, 'magenta');
+
+  const [left, right] = player.fov(1.0);
+
+  drawLine(player.position, left);
+  drawLine(player.position, right);
+
+  CTX_2D.restore();
+}
+
+function insideScene(point) {
+  return(
+    point.x < GRID_COLS && point.x >= 0 &&
+    point.y < GRID_ROWS && point.y >= 0
+  );
+}
+
+function renderScene(player) {
+  const [fovLeft, fovRight] = player.fov(EPS);
+
+  for (let x = 0; x < GAME_WIDTH; ++x) {
+    const { result: rayPoint, resultCell: rayCell } = castRay(
+      player.position, fovLeft.lerp(fovRight, x / GAME_WIDTH)
+    );
+
+    if (!insideScene(rayCell)) { continue };
+
+    const color = SCENE[rayCell.y][rayCell.x];
+
+    if (color == null) { continue };
+
+    const rayVector = rayPoint.sub(player.position);
+    const directionVector = Vec2.fromAngle(player.direction)
+
+    const stripHeight = GAME_HEIGHT / rayVector.dot(directionVector);
+
+    CTX_2D.fillStyle = color;
+    CTX_2D.fillRect(
+      x * STRIP_WIDTH, (GAME_HEIGHT - stripHeight) * 0.5, STRIP_WIDTH, stripHeight
+    );
+  }
+}
+
 function castRay(from, to) {
-    const result = rayStep(from, to);
-    CTX_2D.strokeStyle = 'blue';
-    drawCircle(result, 0.15, 'blue');
+  const result = rayStep(from, to);
+  // CTX_2D.strokeStyle = 'blue';
+  // drawCircle(result, 0.15, 'blue');
 
-    const resultCell = pointCell(result);
+  const resultCell = pointCell(result);
 
-    if (
-      resultCell.x < GRID_COLS && resultCell.x >= 0 &&
-      resultCell.y < GRID_ROWS && resultCell.y >= 0 &&
-      SCENE[resultCell.y][resultCell.x] == null
-    ) {
-      castRay(to, result)
-    }
+  if (
+    insideScene(resultCell) && SCENE[resultCell.y][resultCell.x] == null
+  ) {
+    return castRay(to, result);
+  } else {
+    return { result, resultCell }
+  }
 }
 
 function rayStep(start, end) {
@@ -178,24 +267,54 @@ function rayStep(start, end) {
   return end.distanceTo(xSnaped) > end.distanceTo(ySnaped) ? ySnaped : xSnaped;
 }
 
-drawGrid();
+function renderGame(player) {
+  CTX_2D.fillStyle = "#181818";
+  CTX_2D.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-const playerPosition = new Vec2(3.5, 3.5)
+  renderScene(player);
+  renderMinimap(player);
+}
 
-GAME.addEventListener('mousemove', (e) => {
-  const mouse_position = new Vec2(e.offsetX, e.offsetY)
-      .div(new Vec2(CELL_WIDTH, CELL_HEIGHT));
+// -----
 
-  drawGrid();
+GAME.width = GAME_WIDTH;
+GAME.height = GAME_HEIGHT;
 
-  CTX_2D.strokeStyle = 'lightgreen';
-  drawLine(playerPosition, mouse_position);
+CTX_2D.scale(CELL_WIDTH, CELL_HEIGHT)
 
-  CTX_2D.strokeStyle = 'magenta';
-  drawCircle(playerPosition, 0.15, 'magenta');
+const player = new Player(new Vec2(3.5, 3.5), 0);
 
-  CTX_2D.strokeStyle = 'green';
-  drawCircle(mouse_position, 0.15, 'green');
+renderGame(player);
 
-  castRay(playerPosition, mouse_position);
+window.addEventListener("keydown", (e) => {
+  switch (e.code) {
+    case 'KeyW': {
+        player.position = player.position.add(
+          Vec2.fromAngle(player.direction).scale(PLAYER_STEP_LEN)
+        );
+    } break;
+    case 'KeyS': {
+        player.position = player.position.sub(
+          Vec2.fromAngle(player.direction).scale(PLAYER_STEP_LEN)
+        );
+    } break;
+    case 'KeyA': {
+        player.position = player.position.sub(
+          Vec2.fromAngle(player.direction + Math.PI * 0.5).scale(PLAYER_STEP_LEN)
+        );
+    } break;
+    case 'KeyD': {
+        player.position = player.position
+            .add(Vec2.fromAngle(player.direction + Math.PI * 0.5).scale(PLAYER_STEP_LEN));
+    } break;
+    case 'KeyL': {
+        player.direction += Math.PI*0.1;
+    } break;
+    case 'KeyH': {
+        player.direction -= Math.PI*0.1;
+    } break;
+    default: { return }
+  }
+
+  renderGame(player);
 })
