@@ -9,26 +9,28 @@ const EPS = 1e-6;
 const PLAYER_STEP_LEN = 0.5;
 
 const SCENE = [
-  [null, "red", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "green", null, null, null, null, null, null, null, null, null],
-  [null, "red", null, null, null, null, null, null, null, null, null],
-  [null, "red", null, null, null, null, null, null, null, null, "purple"],
+  [null, "red",   null, null, null, "orange", "yellow", null, null, null, null],
+  [null, "green", null, null, null, null,     "blue",   null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "green", null, null, null, null,     null,     null, null, null, null],
+  [null, "red",   null, null, null, null,     null,     null, null, null, null],
+  [null, "red",   null, null, null, null,     null,     null, null, null, "purple"],
 ]
-
-const STRIP_WIDTH = 0.1;
 
 const GRID_COLS = SCENE[0].length ;
 const GRID_ROWS = SCENE.length;
 
 const CELL_WIDTH = GAME_WIDTH / GRID_COLS;
 const CELL_HEIGHT = GAME_HEIGHT / GRID_ROWS;
+
+const SCREEN_WIDTH = 300;
+
+const STRIP_WIDTH = GAME_WIDTH / SCREEN_WIDTH;
 
 class Vec2 {
   constructor(x, y) {
@@ -172,6 +174,8 @@ function pointCell(point) {
 function renderMinimap(player) {
   CTX_2D.save();
 
+  CTX_2D.scale(CELL_WIDTH, CELL_HEIGHT)
+
   CTX_2D.translate(...MINIMAP_POSITION.array());
   CTX_2D.scale(...MINIMAP_SIZE.div(GRID_SIZE).array());
 
@@ -183,6 +187,20 @@ function renderMinimap(player) {
 
   drawLine(player.position, left);
   drawLine(player.position, right);
+
+  for (let x = 0; x < SCREEN_WIDTH; ++x) {
+    const { result: rayPoint, resultCell: rayCell } = castRay(
+      player.position, left.lerp(right, x / SCREEN_WIDTH)
+    );
+
+    if (!insideScene(rayCell)) { continue };
+
+    const color = SCENE[rayCell.y][rayCell.x];
+
+    if (color == null) { continue };
+
+    drawLine(player.position, rayPoint);
+  }
 
   CTX_2D.restore();
 }
@@ -197,9 +215,9 @@ function insideScene(point) {
 function renderScene(player) {
   const [fovLeft, fovRight] = player.fov(EPS);
 
-  for (let x = 0; x < GAME_WIDTH; ++x) {
+  for (let x = 0; x < SCREEN_WIDTH; ++x) {
     const { result: rayPoint, resultCell: rayCell } = castRay(
-      player.position, fovLeft.lerp(fovRight, x / GAME_WIDTH)
+      player.position, fovLeft.lerp(fovRight, x / SCREEN_WIDTH)
     );
 
     if (!insideScene(rayCell)) { continue };
@@ -279,8 +297,6 @@ function renderGame(player) {
 
 GAME.width = GAME_WIDTH;
 GAME.height = GAME_HEIGHT;
-
-CTX_2D.scale(CELL_WIDTH, CELL_HEIGHT)
 
 const player = new Player(new Vec2(3.5, 3.5), 0);
 
