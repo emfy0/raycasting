@@ -1,8 +1,8 @@
 const GAME = document.getElementById('game');
 const CTX_2D = GAME.getContext('2d');
 
-const GAME_WIDTH = 2000;
-const GAME_HEIGHT = 2000;
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 1200;
 
 const EPS = 1e-6;
 
